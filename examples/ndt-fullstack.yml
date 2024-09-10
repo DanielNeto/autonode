@@ -218,5 +218,14 @@ services:
 networks:
   internal:
   macvlan-ndt:
-    external: true
     name: macvlan-ndt
+    driver: macvlan
+    driver_opts:
+      parent: "${HOST_INTERFACE}"
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: "${SUBNET_IPV4}"
+          gateway: "${GATEWAY_IPV4}"
+        - subnet: "${SUBNET_IPV6}"
+          gateway: "${GATEWAY_IPV6}"
