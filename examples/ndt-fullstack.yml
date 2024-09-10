@@ -3,7 +3,8 @@ services:
   register-node:
     image: measurementlab/autojoin-register:${DOCKER_TAG}
     pull_policy: always
-    network_mode: host
+    networks:
+      - internal
     volumes:
       - ./autonode:/autonode
     command:
@@ -26,7 +27,6 @@ services:
 
   ndt-server:
     image: measurementlab/ndt-server:v0.22.0
-    network_mode: host
     cap_add:
       - NET_BIND_SERVICE
     volumes:
@@ -36,6 +36,13 @@ services:
       - ./resultsdir:/resultsdir
       - ./autonode:/autonode
       - ./autocert:/autocert
+    sysctls:
+      net.ipv4.tcp_congestion_control: bbr
+    networks:
+      macvlan-ndt:
+        ipv4_address: "${IPV4}"
+        ipv6_address: "${IPV6}"
+      internal:
     depends_on:
       generate-schemas-ndt7:
         condition: service_completed_successfully
@@ -47,12 +54,8 @@ services:
     # must not be in use.
     ports:
       # ndt-server TLS and non-TLS ports.
-      - target: 443
-        published: 443
-        protocol: tcp
-      - target: 80
-        published: 80
-        protocol: tcp
+      - "${IPV4}:443:443"
+      - "${IPV4}:80:80"
       # ndt-server prometheus.
       - target: 9990
         published: 9990
@@ -109,7 +112,8 @@ services:
       - -registration-url=file:///autonode/registration.json
       - -heartbeat-url=wss://${LOCATE_URL}/v2/platform/heartbeat?key=${API_KEY}
       - -services=ndt/ndt7=ws:///ndt/v7/download,ws:///ndt/v7/upload,wss:///ndt/v7/download,wss:///ndt/v7/upload
-    network_mode: host
+    networks:
+      - internal
 
   uuid-annotator:
     image: measurementlab/uuid-annotator:v0.5.9
@@ -123,7 +127,8 @@ services:
         condition: service_started
       register-node:
         condition: service_healthy
-    network_mode: host
+    networks:
+      - internal
     environment:
       # TODO(mlab): replace service account with output from the registration endpoint.
       - GOOGLE_APPLICATION_CREDENTIALS=/certs/service-account-autojoin.json
@@ -146,7 +151,8 @@ services:
       - ./schemas:/schemas
       - ./certs:/certs
       - ./autonode:/autonode
-    network_mode: host
+    networks:
+      - internal
     depends_on:
       generate-schemas-ndt7:
         condition: service_completed_successfully
@@ -180,8 +186,9 @@ services:
 
   # Generate the schemas needed by jostler.
   generate-schemas-ndt7:
-    network_mode: host
     image: measurementlab/ndt-server:v0.22.0
+    networks:
+      - internal
     volumes:
       - ./schemas:/schemas
     entrypoint:
@@ -189,8 +196,9 @@ services:
     - -ndt7=/schemas/ndt7.json
 
   generate-schemas-annotation2:
-    network_mode: host
     image: measurementlab/uuid-annotator:v0.5.8
+    networks:
+      - internal
     volumes:
       - ./schemas:/schemas
     entrypoint:
@@ -199,9 +207,16 @@ services:
 
   # Generate the uuid needed by the ndt-server.
   generate-uuid:
-    network_mode: host
     image: measurementlab/uuid:v1.0.0
+    networks:
+      - internal
     volumes:
       - ./schemas:/schemas
     command:
       - -filename=/schemas/uuid.prefix
+
+networks:
+  internal:
+  macvlan-ndt:
+    external: true
+    name: macvlan-ndt
